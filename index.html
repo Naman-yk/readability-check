@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Chapter readability check</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--paper:#F4F6FA;--surface:#fff;--ink:#17202E;--muted:#586377;--line:#D5DBE6;--mark:#FFE164;--markink:#17202E;--accent:#25447A;--accentink:#fff;
+--serif:Charter,"Iowan Old Style","Palatino Linotype",Georgia,serif;--sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--paper:#10141C;--surface:#181E2A;--ink:#E7EBF3;--muted:#9AA6BB;--line:#2B3446;--mark:#6A5700;--markink:#FFF3C2;--accent:#9DBBF2;--accentink:#10141C}}
+:root[data-theme="dark"]{--paper:#10141C;--surface:#181E2A;--ink:#E7EBF3;--muted:#9AA6BB;--line:#2B3446;--mark:#6A5700;--markink:#FFF3C2;--accent:#9DBBF2;--accentink:#10141C}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.5}
+main{max-width:46rem;margin:0 auto;padding:clamp(1.25rem,4vw,3rem) clamp(1rem,4vw,1.5rem) 4rem}
+h1{font-family:var(--serif);font-weight:600;font-size:clamp(1.9rem,5vw,2.6rem);line-height:1.1;margin:0 0 .6rem;letter-spacing:-.01em}
+.lede{font-family:var(--serif);font-size:1.1rem;color:var(--muted);margin:0 0 1.75rem;max-width:36rem}
+label{display:block;font-weight:600;margin-bottom:.4rem}
+textarea{width:100%;min-height:15rem;resize:vertical;padding:1rem;font:1.05rem/1.65 var(--serif);color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px}
+textarea:focus-visible,button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.bar{display:flex;flex-wrap:wrap;gap:.75rem;align-items:center;margin:.9rem 0 0}
+button{font:600 1rem var(--sans);padding:.7rem 1.15rem;border-radius:6px;cursor:pointer;border:1px solid var(--accent)}
+.go{background:var(--accent);color:var(--accentink)}
+.alt{background:transparent;color:var(--accent)}
+#count{margin-left:auto;color:var(--muted);font-size:.95rem}
+#empty{color:var(--muted);margin-top:1.5rem}
+#results{margin-top:2.5rem}
+.summary{font-family:var(--serif);font-size:1.35rem;line-height:1.4;margin:0 0 1.25rem}
+.summary b{font-size:2rem;font-weight:700}
+dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(8.5rem,1fr));gap:1rem;margin:0 0 2.5rem;padding:1rem 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+dt{color:var(--muted);font-size:.9rem}
+dd{margin:0;font-size:1.3rem;font-weight:600}
+h2{font-family:var(--serif);font-size:1.35rem;margin:0 0 .75rem}
+.ms{white-space:pre-wrap;font:1.1rem/1.75 var(--serif);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:1.25rem;margin:0 0 2.5rem;overflow-wrap:anywhere}
+mark{background:var(--mark);color:var(--markink);padding:.05em .1em;border-radius:2px}
+mark sup{font:700 .7em var(--sans);margin-left:.15em}
+ol{padding-left:1.4rem;margin:0 0 2rem}
+li{margin:0 0 1.1rem;padding-left:.25rem}
+li q{font-family:var(--serif);font-size:1.05rem;quotes:none}
+.meta{display:block;color:var(--muted);font-size:.9rem;margin-top:.2rem}
+.note{color:var(--muted);font-size:.9rem;max-width:36rem}
+</style>
+</head>
+<body>
+<main>
+<h1>Chapter readability check</h1>
+<p class="lede">Paste a chapter to see how easy it is to read, and which five sentences are hardest to get through.</p>
+<label for="chapter">Chapter text</label>
+<textarea id="chapter" spellcheck="false" placeholder="Paste your chapter here"></textarea>
+<div class="bar">
+<button class="go" id="run" type="button">Check readability</button>
+<button class="alt" id="sample" type="button">Load a sample chapter</button>
+<span id="count" aria-live="polite">0 words</span>
+</div>
+<p id="empty" hidden>Paste at least one full sentence, then check again.</p>
+<section id="results" hidden aria-live="polite">
+<p class="summary">Reading ease <b id="ease"></b> out of 100: <span id="easeLabel"></span>, about grade <span id="grade"></span>.</p>
+<dl>
+<div><dt>Words</dt><dd id="sW"></dd></div>
+<div><dt>Sentences</dt><dd id="sS"></dd></div>
+<div><dt>Words per sentence</dt><dd id="sWS"></dd></div>
+<div><dt>Syllables per word</dt><dd id="sSW"></dd></div>
+</dl>
+<h2>Your chapter, hardest sentences marked</h2>
+<div class="ms" id="ms"></div>
+<h2>The five hardest sentences</h2>
+<ol id="hard"></ol>
+<p class="note">Syllables are estimated from spelling, so unusual words can be miscounted. Use the scores as a guide, not a verdict.</p>
+</section>
+</main>
+<script>
+const ABBR = /\b(?:Mr|Mrs|Ms|Dr|Prof|Sr|Jr|St|vs|etc|e\.g|i\.e)\./gi;
+function protect(t) {
+  return t.replace(ABBR, m => m.replace(/\./g, '\u2024'))
+          .replace(/(\d)\.(\d)/g, '$1\u2024$2')
+          .replace(/\b([A-Z])\.(?=\s?[A-Z])/g, '$1\u2024');
+}
+function splitSentences(text) {
+  const out = [], blocks = /\S[\s\S]*?(?=\n\s*\n|$)/g;
+  let b;
+  while ((b = blocks.exec(text))) {
+    const base = b.index, p = protect(b[0]), re = /[^.!?]+(?:[.!?]+["\u201d\u2019')\]]*)?/g;
+    let m;
+    while ((m = re.exec(p))) {
+      const s = m[0], lead = s.length - s.trimStart().length, trail = s.length - s.trimEnd().length;
+      const start = base + m.index + lead, end = base + m.index + s.length - trail;
+      if (end <= start) continue;
+      const prev = out[out.length - 1];
+      if (prev && prev.end <= base + m.index + lead && prev.start >= base && /[!?]+["\u201d\u2019']?$/.test(prev.text) && /^[a-z]/.test(text.slice(start, end))) {
+        prev.end = end; prev.text = text.slice(prev.start, end);
+      } else out.push({ start, end, text: text.slice(start, end) });
+    }
+  }
+  return out;
+}
+const EXC = { created: 3, create: 2, creating: 3, being: 2, idea: 3, area: 3, science: 2, queue: 1, business: 2, every: 2, evening: 2, beautiful: 3, quiet: 2, different: 3, real: 1, poem: 2, theory: 3, violent: 3 };
+function syllables(word) {
+  let w = word.toLowerCase().replace(/[^a-z]/g, '');
+  if (!w) return 0;
+  const ex = EXC[w] ?? EXC[w.replace(/s$/, '')];
+  if (ex) return ex;
+  if (w.length <= 3) return 1;
+  w = w.replace(/(?:[^laeiouy]es|(?<![td])ed|[^laeiouy]e)$/, '').replace(/^y/, '');
+  const m = w.match(/[aeiouy]{1,2}/g);
+  return m ? m.length : 1;
+}
+function wordsIn(s) { return s.match(/[A-Za-z][A-Za-z'\u2019-]*/g) || []; }
+function measure(s) {
+  const ws = wordsIn(s), syl = ws.reduce((a, w) => a + syllables(w), 0);
+  return { words: ws.length, syl };
+}
+function grade(words, sents, syl) { return 0.39 * (words / sents) + 11.8 * (syl / words) - 15.59; }
+function ease(words, sents, syl) { return 206.835 - 1.015 * (words / sents) - 84.6 * (syl / words); }
+function analyze(text) {
+  const ss = splitSentences(text).map(s => ({ ...s, ...measure(s.text) })).filter(s => s.words > 0);
+  const words = ss.reduce((a, s) => a + s.words, 0), syl = ss.reduce((a, s) => a + s.syl, 0);
+  if (!words) return null;
+  ss.forEach(s => { s.grade = grade(s.words, 1, s.syl); });
+  const elig = ss.filter(s => s.words >= 5), pool = elig.length >= 5 ? elig : ss;
+  const hardest = [...pool].sort((a, b) => b.grade - a.grade).slice(0, 5);
+  return { sentences: ss, words, syl, ease: ease(words, ss.length, syl), grade: grade(words, ss.length, syl), hardest };
+}
+
+if (typeof document !== 'undefined') {
+  const $ = id => document.getElementById(id), input = $('chapter');
+  const bands = [[90, 'very easy'], [80, 'easy'], [70, 'fairly easy'], [60, 'plain English'], [50, 'fairly difficult'], [30, 'difficult'], [-Infinity, 'very difficult']];
+  const SAMPLE = 'Mara walked down to the harbour before the fishing boats came in. The air smelled of salt and diesel. \u201cLate again,\u201d said Tom, coiling a rope. She shrugged.\n\nThe council\u2019s decision to reallocate the municipal moorings, notwithstanding the objections raised by the fishermen\u2019s cooperative, had been communicated through an incomprehensibly worded circular that nobody at the harbour could reasonably be expected to interpret without legal assistance. Tom read it twice and spat into the water. \u201cThey want us gone,\u201d he said. Mara said nothing. The tide was turning, and the first boat appeared beyond the breakwater, small and dark against the pale morning.';
+  const count = () => { const n = wordsIn(input.value).length; $('count').textContent = n.toLocaleString() + (n === 1 ? ' word' : ' words'); };
+  function run() {
+    const text = input.value, a = analyze(text);
+    $('empty').hidden = !!a; $('results').hidden = !a;
+    if (!a) return;
+    $('ease').textContent = Math.round(a.ease);
+    $('easeLabel').textContent = bands.find(b => a.ease >= b[0])[1];
+    $('grade').textContent = a.grade.toFixed(1);
+    $('sW').textContent = a.words.toLocaleString(); $('sS').textContent = a.sentences.length.toLocaleString();
+    $('sWS').textContent = (a.words / a.sentences.length).toFixed(1); $('sSW').textContent = (a.syl / a.words).toFixed(2);
+    const byStart = [...a.hardest].map((s, i) => ({ s, rank: i + 1 })).sort((x, y) => x.s.start - y.s.start);
+    const ms = $('ms'); ms.textContent = ''; let pos = 0;
+    for (const { s, rank } of byStart) {
+      ms.append(text.slice(pos, s.start));
+      const m = document.createElement('mark'), sup = document.createElement('sup');
+      m.append(text.slice(s.start, s.end)); sup.textContent = rank; m.append(sup); ms.append(m); pos = s.end;
+    }
+    ms.append(text.slice(pos));
+    const ol = $('hard'); ol.textContent = '';
+    a.hardest.forEach(s => {
+      const li = document.createElement('li'), q = document.createElement('q'), meta = document.createElement('span');
+      q.textContent = s.text; meta.className = 'meta';
+      meta.textContent = 'Grade level ' + s.grade.toFixed(1) + '. ' + s.words + ' words, ' + (s.syl / s.words).toFixed(1) + ' syllables a word.';
+      li.append(q, meta); ol.append(li);
+    });
+  }
+  input.addEventListener('input', count);
+  $('run').addEventListener('click', run);
+  $('sample').addEventListener('click', () => { input.value = SAMPLE; count(); run(); });
+}
+</script>
+</body>
+</html>
